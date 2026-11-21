@@ -1,0 +1,37 @@
+# Flatland - router/firewall ruleset (default deny, logged drops)
+# Zones: USER 10.20.10.0/24 | DMZ 10.20.20.0/24 | SERVER 10.20.30.0/24 | MGMT 10.20.99.0/24
+define USER_NET = 10.20.10.0/24
+define WEB      = 10.20.20.20
+define APP      = 10.20.30.30
+define ADMIN    = 10.20.99.60
+define MANAGED  = { 10.20.10.10, 10.20.20.20, 10.20.30.30, 10.20.30.40, 10.20.30.50 }
+
+table inet lab
+delete table inet lab
+
+table inet lab {
+    chain forward {
+        type filter hook forward priority filter; policy drop;
+        ct state established,related accept
+        ct state invalid counter drop
+
+        # F1  USER -> DMZ web, HTTPS only
+        ip saddr $USER_NET ip daddr $WEB tcp dport 443 ct state new counter accept
+        # F2  DMZ web -> SERVER app, app port only
+        ip saddr $WEB ip daddr $APP tcp dport 8080 ct state new counter accept
+        # F3  MGMT admin -> every host, SSH only, rate limited (stretch)
+        ip saddr $ADMIN ip daddr $MANAGED tcp dport 22 ct state new limit rate over 10/minute burst 10 packets counter log group 0 prefix "SSH-RATELIMIT " drop
+        ip saddr $ADMIN ip daddr $MANAGED tcp dport 22 ct state new counter accept
+        ip saddr $ADMIN icmp type echo-request counter accept
+
+        # Everything else (incl. server->outside = egress filtering) is dropped and logged
+        counter log group 0 prefix "FWD-DROP " drop
+    }
+    chain input {
+        type filter hook input priority filter; policy drop;
+        iif lo accept
+        ct state established,related accept
+        ip saddr $ADMIN icmp type echo-request accept
+        counter log group 0 prefix "RTR-IN-DROP " drop
+    }
+}

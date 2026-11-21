@@ -1,0 +1,502 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Flatland · Network Segmentation Lab</title>
+<style>
+:root{
+  --bg:#0b1016; --panel:#111923; --panel2:#152030; --line:#223042; --text:#d8e1ea; --muted:#7f8fa3;
+  --red:#ff4d5e; --red-d:#5a1820; --green:#2fd38a; --green-d:#123d2c; --amber:#ffb547; --blue:#4da3ff; --blue-d:#14304f;
+  --mono: ui-monospace, "Cascadia Code", "JetBrains Mono", Consolas, monospace;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--text);font:14px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+header{display:flex;align-items:center;gap:16px;padding:12px 20px;border-bottom:1px solid var(--line);background:#0d141c;position:sticky;top:0;z-index:5;flex-wrap:wrap}
+.brand{display:flex;flex-direction:column}
+.brand b{font-size:17px;letter-spacing:.3px}
+.brand span{font-size:12px;color:var(--muted)}
+.seg-switch{display:flex;background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:3px}
+.seg-switch button{border:0;background:transparent;color:var(--muted);padding:7px 14px;border-radius:7px;cursor:pointer;font-weight:600}
+.seg-switch button.on{background:var(--blue-d);color:#fff}
+.pill{font:600 12px var(--mono);padding:4px 10px;border-radius:99px;border:1px solid var(--line);color:var(--muted)}
+.pill.up{color:var(--green);border-color:#1e5a41;background:var(--green-d)}
+.pill.busy{color:var(--amber);border-color:#6b4c19;background:#3a2a10}
+.actions{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto}
+.btn{border:1px solid var(--line);background:var(--panel2);color:var(--text);padding:7px 12px;border-radius:8px;cursor:pointer;font-weight:600;font-size:13px}
+.btn:hover:not(:disabled){border-color:#3a5470}
+.btn.primary{background:#1d4ed8;border-color:#2b5ef0;color:#fff}
+.btn.danger{background:#4a1820;border-color:#7a2633;color:#ffd5da}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+main{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(330px,1fr);gap:14px;padding:14px 20px 24px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px;min-width:0}
+.card h2{margin:0 0 10px;font-size:13px;text-transform:uppercase;letter-spacing:1.1px;color:var(--muted);display:flex;align-items:center;gap:8px}
+.card h2 .r{margin-left:auto;text-transform:none;letter-spacing:0;font-weight:500}
+.span2{grid-column:1/-1}
+/* map */
+#map{width:100%;height:auto;display:block}
+.zone rect{fill:#0f1824;stroke:#2a3a50;stroke-dasharray:5 4;rx:12}
+.zone text{fill:#6f819a;font:600 11px var(--mono);letter-spacing:.6px}
+.node{transition:transform .7s cubic-bezier(.4,.1,.2,1)}
+.node rect{fill:#172433;stroke:#33475f;stroke-width:1.5;rx:10}
+.node .nm{fill:#e7eef6;font:700 13px system-ui}
+.node .ip{fill:#8ea0b6;font:11px var(--mono)}
+.node .svc{fill:#5f738c;font:10px var(--mono)}
+.node.attacker rect{stroke:var(--red);fill:#2a1218}
+.node.attacker .tag{fill:var(--red);font:700 9px var(--mono);letter-spacing:.8px}
+.node.tampered rect{stroke:var(--red);fill:#3a1219;animation:pulse 1.2s infinite}
+.node.intact rect{stroke:var(--green)}
+.node.router rect{fill:#13263a;stroke:var(--blue)}
+.node.hidden{opacity:0;pointer-events:none}
+.node{opacity:1;transition:transform .7s cubic-bezier(.4,.1,.2,1),opacity .5s}
+@keyframes pulse{50%{fill:#5a1820}}
+.bus{stroke:#2f4560;stroke-width:6;stroke-linecap:round;transition:opacity .5s}
+.bus-label{fill:#6f819a;font:600 11px var(--mono)}
+.edge{fill:none;stroke-width:2.6;stroke-linecap:round}
+.edge.running{stroke:var(--amber);stroke-dasharray:8 7;animation:dash .6s linear infinite}
+.edge.succeeded{stroke:var(--red);filter:drop-shadow(0 0 4px rgba(255,77,94,.7))}
+.edge.blocked{stroke:#ff8592;stroke-dasharray:3 6;opacity:.85}
+.edge.biz-pass{stroke:var(--blue);stroke-width:1.6;opacity:.55}
+.edge.biz-fail{stroke:var(--amber);stroke-width:1.6;stroke-dasharray:4 4}
+@keyframes dash{to{stroke-dashoffset:-30}}
+.blockmark{fill:var(--green);font:800 22px system-ui}
+.shield circle{fill:var(--green-d);stroke:var(--green);stroke-width:2}
+.legend{display:flex;gap:16px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin-top:6px}
+.legend i{display:inline-block;width:22px;height:3px;vertical-align:middle;margin-right:6px;border-radius:2px}
+.toggles{display:flex;gap:12px;font-size:12px;color:var(--muted)}
+.toggles label{cursor:pointer;display:flex;align-items:center;gap:5px}
+/* attacker + score */
+.attacker-card{display:flex;gap:12px;align-items:flex-start;background:#1a1016;border:1px solid #4a1c26;border-radius:10px;padding:12px;margin-bottom:12px}
+.skull{width:42px;height:42px;border-radius:10px;background:var(--red-d);display:grid;place-items:center;flex:none}
+.attacker-card b{color:#ffc3ca}
+.attacker-card ul{margin:6px 0 0;padding-left:18px;color:#c9b3b8;font-size:12.5px}
+.attacker-card code{font-family:var(--mono);color:#ffd5da}
+.tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.tile{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+.tile .k{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px}
+.tile .v{font:800 24px var(--mono);margin-top:2px}
+.tile.bad{border-color:#6a2230;background:#22121a}.tile.bad .v{color:var(--red)}
+.tile.good{border-color:#1e5a41;background:#0f241c}.tile.good .v{color:var(--green)}
+table.cmp{width:100%;border-collapse:collapse;margin-top:12px;font-size:13px}
+table.cmp th,table.cmp td{padding:7px 8px;border-bottom:1px solid var(--line);text-align:left}
+table.cmp th{color:var(--muted);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.8px}
+.chip{display:inline-block;font:700 11px var(--mono);padding:3px 8px;border-radius:6px;border:1px solid var(--line);color:var(--muted);white-space:nowrap}
+.chip.red{color:var(--red);border-color:#6a2230;background:#22121a}
+.chip.green{color:var(--green);border-color:#1e5a41;background:#0f241c}
+.chip.amber{color:var(--amber);border-color:#6b4c19;background:#2d2110}
+/* timeline */
+.steps{display:flex;flex-direction:column;gap:8px}
+.step{display:grid;grid-template-columns:34px 1fr auto;gap:10px;align-items:start;background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:10px 12px;transition:border-color .3s,background .3s}
+.step .n{width:34px;height:34px;border-radius:9px;display:grid;place-items:center;font:800 13px var(--mono);background:#1c2a3b;color:var(--muted)}
+.step .t{font-weight:700}
+.step .m{font-size:12px;color:var(--muted)}
+.step .tech{font:600 11px var(--mono);color:#93a7c0;background:#1a2636;border-radius:5px;padding:1px 6px;margin-left:6px}
+.step pre{margin:6px 0 0;font:11.5px/1.4 var(--mono);color:#a9b8c9;white-space:pre-wrap;word-break:break-all;max-height:92px;overflow:auto}
+.step.running{border-color:#6b4c19;background:#221b10}.step.running .n{background:#3a2a10;color:var(--amber)}
+.step.succeeded{border-color:#6a2230;background:#1f1117}.step.succeeded .n{background:var(--red-d);color:var(--red)}
+.step.blocked{border-color:#1e5a41;background:#0f1f19}.step.blocked .n{background:var(--green-d);color:var(--green)}
+/* flows */
+.flows{display:flex;flex-direction:column;gap:4px}
+.flow{display:flex;align-items:center;gap:10px;padding:6px 8px;border-radius:7px;background:var(--panel2);font-size:13px}
+.dot{width:9px;height:9px;border-radius:50%;background:#3a4a5e;flex:none}
+.dot.pass{background:var(--green);box-shadow:0 0 6px var(--green)}.dot.fail{background:var(--red);box-shadow:0 0 6px var(--red)}
+.flow code{font:12px var(--mono);color:#a9b8c9}
+/* db */
+table.db{width:100%;border-collapse:collapse;font-size:13px}
+table.db th,table.db td{padding:7px 9px;border-bottom:1px solid var(--line);text-align:left}
+table.db th{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.8px}
+table.db tr.bad td{background:#22121a}
+td .old{color:var(--muted);text-decoration:line-through;margin-right:6px;font-family:var(--mono)}
+td .new{color:var(--red);font-weight:800;font-family:var(--mono)}
+.banner{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:9px;margin-bottom:10px;font-weight:700}
+.banner.bad{background:#2a1118;border:1px solid #6a2230;color:#ffb3bc}
+.banner.good{background:#0f241c;border:1px solid #1e5a41;color:#9cf0c8}
+.banner.none{background:var(--panel2);border:1px solid var(--line);color:var(--muted);font-weight:500}
+/* fw */
+.fwlist{max-height:260px;overflow:auto;font:12px var(--mono)}
+.fwrow{display:grid;grid-template-columns:72px 1fr 92px;gap:8px;padding:5px 6px;border-bottom:1px solid #1a2534}
+.fwrow .a{color:#ffb3bc}.fwrow .p{color:var(--green);text-align:right}
+.empty{color:var(--muted);font-size:13px;padding:8px 2px}
+/* terminal */
+#term{background:#070b10;border:1px solid var(--line);border-radius:10px;height:300px;overflow:auto;padding:10px 12px;font:12px/1.45 var(--mono);color:#9fb0c3;white-space:pre-wrap;word-break:break-all}
+#term .hd{color:#fff;background:#1a2a40;display:inline-block;padding:1px 6px;border-radius:4px;margin:6px 0 2px}
+#term .red{color:var(--red)}#term .green{color:var(--green)}#term .amber{color:var(--amber)}#term .dim{color:#4f6175}
+.spinner{width:12px;height:12px;border:2px solid #6b4c19;border-top-color:var(--amber);border-radius:50%;display:inline-block;animation:spin .8s linear infinite;vertical-align:-2px;margin-right:6px}
+@keyframes spin{to{transform:rotate(360deg)}}
+@media (max-width:1100px){main{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand"><b>Flatland · Network Segmentation Lab</b><span>PS-2 · compromised workstation → payroll database</span></div>
+  <div class="seg-switch" role="tablist">
+    <button id="m-flat" class="on" onclick="setMode('flat')">BEFORE · Flat network</button>
+    <button id="m-seg" onclick="setMode('seg')">AFTER · Segmented + firewall</button>
+  </div>
+  <span id="labpill" class="pill">lab: checking…</span>
+  <div class="actions">
+    <button class="btn" data-cmd="up">▶ Start lab</button>
+    <button class="btn primary" data-cmd="demo">⚡ Run full demo</button>
+    <button class="btn" data-cmd="attack">☠ Attack</button>
+    <button class="btn" data-cmd="business">✔ Business test</button>
+    <button class="btn" data-cmd="integrity">⛁ Integrity</button>
+    <button class="btn" data-cmd="reset">↺ Reset data</button>
+    <button class="btn danger" data-cmd="down">■ Stop lab</button>
+  </div>
+</header>
+
+<main>
+  <!-- MAP -->
+  <section class="card">
+    <h2>Network map <span id="mapsub" style="text-transform:none;letter-spacing:0;color:#9db0c6">one flat /24: every host can reach every host</span>
+      <span class="r toggles">
+        <label><input type="checkbox" id="t-att" checked onchange="draw()"> attack paths</label>
+        <label><input type="checkbox" id="t-biz" checked onchange="draw()"> business flows</label>
+      </span>
+    </h2>
+    <svg id="map" viewBox="0 0 760 440" aria-label="network map">
+      <g id="zones"></g>
+      <line class="bus" id="bus" x1="60" y1="220" x2="700" y2="220"/>
+      <text class="bus-label" id="buslabel" x="380" y="428" text-anchor="middle">10.10.0.0/24 · single flat network (no filtering)</text>
+      <g id="edges"></g>
+      <g id="nodes"></g>
+      <g id="marks"></g>
+    </svg>
+    <div class="legend">
+      <span><i style="background:var(--amber)"></i>attack in progress</span>
+      <span><i style="background:var(--red)"></i>attack succeeded</span>
+      <span><i style="background:#ff8592;opacity:.8"></i>attack stopped at firewall ✕</span>
+      <span><i style="background:var(--blue)"></i>legitimate business flow</span>
+    </div>
+  </section>
+
+  <!-- ATTACKER + SCORE -->
+  <section class="card">
+    <h2>The attacker</h2>
+    <div class="attacker-card">
+      <div class="skull"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#ff4d5e" stroke-width="2" stroke-linecap="round"><path d="M12 3a8 8 0 0 0-8 8c0 2.6 1.2 4.5 3 5.6V20h10v-3.4c1.8-1.1 3-3 3-5.6a8 8 0 0 0-8-8z"/><circle cx="9" cy="11" r="1.6" fill="#ff4d5e"/><circle cx="15" cy="11" r="1.6" fill="#ff4d5e"/><path d="M10 20v-2M14 20v-2"/></svg></div>
+      <div>
+        <b>Compromised employee workstation (ws)</b> · <code id="wsip">10.10.0.10</code>
+        <ul>
+          <li>Phishing gave the attacker a shell on an ordinary employee PC.</li>
+          <li>A reused password (<code>it</code>) and the app's DB password were found on disk.</li>
+          <li>Goal: reach the payroll database and <b>change a salary</b>.</li>
+        </ul>
+      </div>
+    </div>
+    <h2>Result · <span id="modename" style="color:#fff">BEFORE</span></h2>
+    <div class="tiles">
+      <div class="tile" id="tile-att"><div class="k">Attack stages succeeded</div><div class="v">–</div></div>
+      <div class="tile" id="tile-biz"><div class="k">Business flows passing</div><div class="v">–</div></div>
+      <div class="tile" id="tile-int"><div class="k">Payroll data</div><div class="v">–</div></div>
+    </div>
+    <table class="cmp">
+      <tr><th></th><th>Before · flat</th><th>After · segmented</th></tr>
+      <tr><td>Attack stages succeeded</td><td id="c-flat-att">–</td><td id="c-seg-att">–</td></tr>
+      <tr><td>Business flows passing</td><td id="c-flat-biz">–</td><td id="c-seg-biz">–</td></tr>
+      <tr><td>Payroll database</td><td id="c-flat-int">–</td><td id="c-seg-int">–</td></tr>
+    </table>
+  </section>
+
+  <!-- ATTACK TIMELINE -->
+  <section class="card">
+    <h2>Attack chain <span class="r" id="attstatus"></span></h2>
+    <div class="steps" id="steps"></div>
+  </section>
+
+  <!-- BUSINESS FLOWS -->
+  <section class="card">
+    <h2>Business flows (must keep working)</h2>
+    <div class="flows" id="flows"></div>
+  </section>
+
+  <!-- DB -->
+  <section class="card">
+    <h2>Payroll database · employees table <span class="r"><a href="https://localhost:8443" target="_blank" style="color:var(--blue)">open Employee Portal ↗</a> &nbsp;<button class="btn" style="padding:3px 9px" onclick="loadDB()">refresh</button></span></h2>
+    <div id="dbbanner" class="banner none">No data yet. Start the lab.</div>
+    <table class="db" id="dbtable"></table>
+  </section>
+
+  <!-- FIREWALL -->
+  <section class="card">
+    <h2>Firewall (router · nftables) <span class="r"><button class="btn" style="padding:3px 9px" onclick="loadFW()">refresh</button></span></h2>
+    <div id="fw"></div>
+  </section>
+
+  <!-- TERMINAL -->
+  <section class="card span2">
+    <h2>Live output <span class="r" id="jobstatus"></span></h2>
+    <div id="term"></div>
+  </section>
+</main>
+
+<script>
+// ---------------- static model ----------------
+const IP = {
+  flat:{ws:'10.10.0.10',web:'10.10.0.20',app:'10.10.0.30',db:'10.10.0.40',files:'10.10.0.50',admin:'10.10.0.60',router:''},
+  seg: {ws:'10.20.10.10',web:'10.20.20.20',app:'10.20.30.30',db:'10.20.30.40',files:'10.20.30.50',admin:'10.20.99.60',router:'.254 ×4'}
+};
+const SVC = {ws:'employee PC',web:'nginx :443',app:'portal :8080',db:'postgres :5432',files:'samba :445',admin:'jump host :22',router:'nftables'};
+const POS = {
+  flat:{ws:[110,100],web:[380,100],app:[650,100],admin:[110,340],files:[380,340],db:[650,340],router:[380,220]},
+  seg: {ws:[120,100],web:[640,100],admin:[120,345],app:[365,345],files:[515,345],db:[665,345],router:[380,205]}
+};
+const ZONES = [
+  {x:20,y:28,w:200,h:146,label:'USER · 10.20.10.0/24'},
+  {x:540,y:28,w:200,h:146,label:'DMZ · 10.20.20.0/24'},
+  {x:20,y:272,w:200,h:146,label:'MGMT · 10.20.99.0/24'},
+  {x:290,y:272,w:450,h:146,label:'SERVER · 10.20.30.0/24'}
+];
+const ZONE_OF = {ws:'user',web:'dmz',admin:'mgmt',app:'srv',db:'srv',files:'srv'};
+const STAGES = [
+  {id:'A1',title:'Port scan / service discovery',tech:'T1046 · T1018',targets:['app','db','files','admin','web'],desc:'nmap from the workstation to every internal host'},
+  {id:'A2',title:'SSH login to the database host',tech:'T1021.004',targets:['db'],desc:'reused password it / ••••••'},
+  {id:'A3',title:'SMB session to the file server',tech:'T1021.002',targets:['files'],desc:'open the company share'},
+  {id:'A4',title:'Copy a tool to the app server',tech:'T1570',targets:['app'],desc:'lateral tool transfer over scp'},
+  {id:'A5',title:'Change a salary in the payroll DB',tech:'T1565.001',targets:['db'],desc:'UPDATE employees … (id 3)'}
+];
+const FLOWS = [
+  {k:'B1',src:'ws',dst:['web'],label:'ws → web :443 (HTTPS)'},
+  {k:'B2',src:'ws',dst:['web','app','db'],label:'Employee Portal: ws → web → app → db'},
+  {k:'B3',src:'web',dst:['app'],label:'web → app :8080 (API)'},
+  {k:'B4',src:'app',dst:['db'],label:'app → db :5432 (SQL)'},
+  {k:'B5',src:'app',dst:['files'],label:'app → files :445 (reports)'},
+  {k:'B6 ws',src:'admin',dst:['ws'],label:'admin → ws :22'},
+  {k:'B6 web',src:'admin',dst:['web'],label:'admin → web :22'},
+  {k:'B6 app',src:'admin',dst:['app'],label:'admin → app :22'},
+  {k:'B6 db',src:'admin',dst:['db'],label:'admin → db :22'},
+  {k:'B6 files',src:'admin',dst:['files'],label:'admin → files :22'}
+];
+
+// ---------------- state ----------------
+const blank = () => ({stages:Object.fromEntries(STAGES.map(s=>[s.id,{status:'pending',detail:[]}])),
+                      flows:{}, integrity:null, diff:[], attackDone:false, bizDone:false});
+const R = {flat:blank(), seg:blank()};
+let mode = 'flat', labs = {flat:[],seg:[]}, job = {running:false}, cur = {mode:null,cmd:null,stage:null,intBlock:false};
+let db = {flat:null,seg:null}, fw = null;
+
+// ---------------- helpers ----------------
+const $ = s => document.querySelector(s);
+const NS = 'http://www.w3.org/2000/svg';
+const el = (tag, attrs={}, parent) => { const e=document.createElementNS(NS,tag); for(const k in attrs) e.setAttribute(k,attrs[k]); if(parent) parent.appendChild(e); return e; };
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+function pathD(a, b, m, toRouterOnly=false){
+  const [x1,y1]=POS[m][a], R0=POS[m].router;
+  if (m==='flat'){
+    const [x2,y2]=POS[m][b];
+    return `M${x1},${y1} Q${(x1+x2)/2},${y1===y2?220:(y1+y2)/2+ (x1===x2?0:0)} ${x2},${y2}`;
+  }
+  if (toRouterOnly) return `M${x1},${y1} L${R0[0]},${R0[1]}`;
+  const [x2,y2]=POS[m][b];
+  if (ZONE_OF[a]===ZONE_OF[b]) return `M${x1},${y1} Q${(x1+x2)/2},${y1-48} ${x2},${y2}`;
+  return `M${x1},${y1} L${R0[0]},${R0[1]} L${x2},${y2}`;
+}
+
+// ---------------- drawing ----------------
+function buildStatic(){
+  const nodes=$('#nodes');
+  for (const id of ['ws','web','app','db','files','admin','router']){
+    const g=el('g',{class:'node '+(id==='ws'?'attacker':id==='router'?'router':''),id:'n-'+id},nodes);
+    el('rect',{x:-62,y:-30,width:124,height:60},g);
+    const t=el('text',{class:'nm',x:0,y:-8,'text-anchor':'middle'},g); t.textContent=id==='ws'?'ws (employee)':id;
+    el('text',{class:'ip',x:0,y:8,'text-anchor':'middle',id:'ip-'+id},g);
+    const s=el('text',{class:'svc',x:0,y:22,'text-anchor':'middle'},g); s.textContent=SVC[id];
+    if(id==='ws'){ const tg=el('text',{class:'tag',x:0,y:-38,'text-anchor':'middle'},g); tg.textContent='☠ COMPROMISED'; }
+    if(id==='db'){ const tg=el('text',{class:'tag',x:0,y:44,'text-anchor':'middle',id:'dbtag',style:'font:700 10px ui-monospace,monospace'},g); }
+  }
+  const z=$('#zones');
+  ZONES.forEach(Z=>{ const g=el('g',{class:'zone'},z); el('rect',{x:Z.x,y:Z.y,width:Z.w,height:Z.h},g); const t=el('text',{x:Z.x+10,y:Z.y+16},g); t.textContent=Z.label; });
+}
+
+function draw(){
+  const m=mode, r=R[m];
+  // nodes
+  for (const id in POS[m]){
+    const n=$('#n-'+id); const [x,y]=POS[m][id];
+    n.style.transform=`translate(${x}px,${y}px)`;
+    $('#ip-'+id).textContent=IP[m][id];
+  }
+  $('#n-router').classList.toggle('hidden', m==='flat');
+  $('#zones').style.opacity = m==='seg'?1:0; $('#zones').style.transition='opacity .5s';
+  $('#bus').style.opacity = m==='flat'?1:0; $('#buslabel').style.opacity = m==='flat'?1:0;
+  $('#mapsub').textContent = m==='flat' ? 'one flat /24: every host can reach every host'
+                                         : '4 zones joined by a router with a default-deny firewall';
+  // db state on the map
+  const dbn=$('#n-db'); dbn.classList.remove('tampered','intact');
+  const tag=$('#dbtag'); tag.textContent='';
+  if (r.integrity==='TAMPERED'){ dbn.classList.add('tampered'); tag.textContent='DATA TAMPERED'; tag.setAttribute('fill','#ff4d5e'); }
+  else if (r.integrity==='INTACT'){ dbn.classList.add('intact'); tag.textContent='DATA INTACT'; tag.setAttribute('fill','#2fd38a'); }
+
+  // edges
+  const E=$('#edges'), M=$('#marks'); E.innerHTML=''; M.innerHTML='';
+  if ($('#t-biz').checked){
+    FLOWS.forEach(f=>{
+      const st=r.flows[f.k]; if(!st) return;
+      let a=f.src; f.dst.forEach(b=>{ el('path',{class:'edge '+(st==='PASS'?'biz-pass':'biz-fail'),d:pathD(a,b,m)},E); a=b; });
+    });
+  }
+  let blockedShown=false;
+  if ($('#t-att').checked){
+    STAGES.forEach(s=>{
+      const st=r.stages[s.id].status; if(st==='pending') return;
+      s.targets.forEach(t=>{
+        if (s.id==='A1' && t==='web') return;             // web:443 is public on purpose
+        if (st==='blocked' && m==='seg'){ el('path',{class:'edge blocked',d:pathD('ws',t,m,true)},E); blockedShown=true; }
+        else el('path',{class:'edge '+st,d:pathD('ws',t,m)},E);
+      });
+    });
+  }
+  if (blockedShown){
+    const [x,y]=POS.seg.router;
+    const g=el('g',{class:'shield'},M); el('circle',{cx:x-78,cy:y,r:15},g);
+    const t=el('text',{class:'blockmark',x:x-78,y:y+8,'text-anchor':'middle'},g); t.textContent='✕';
+  }
+  renderPanels();
+}
+
+// ---------------- panels ----------------
+function counts(r){
+  const done=STAGES.filter(s=>['succeeded','blocked'].includes(r.stages[s.id].status));
+  const succ=STAGES.filter(s=>r.stages[s.id].status==='succeeded').length;
+  const fl=Object.values(r.flows); const pass=fl.filter(v=>v==='PASS').length;
+  return {att: r.attackDone||done.length ? `${succ}/${STAGES.length}` : '–', succ, attRun:done.length,
+          biz: fl.length? `${pass}/${fl.length}` : '–', pass, bizN:fl.length, int: r.integrity||'–'};
+}
+function setTile(id, v, cls){ const t=$(id); t.className='tile '+(cls||''); t.querySelector('.v').textContent=v; }
+function chip(v, good){ if(v==='–') return '–'; return `<span class="chip ${good?'green':'red'}">${esc(v)}</span>`; }
+
+function renderPanels(){
+  const m=mode, r=R[m], c=counts(r);
+  $('#modename').textContent = m==='flat'?'BEFORE · flat network':'AFTER · segmented + firewall';
+  $('#wsip').textContent = IP[m].ws;
+  setTile('#tile-att', c.att, c.att==='–'?'':(c.succ>0?'bad':'good'));
+  setTile('#tile-biz', c.biz, c.biz==='–'?'':(c.pass===c.bizN?'good':'bad'));
+  setTile('#tile-int', c.int, c.int==='–'?'':(c.int==='INTACT'?'good':'bad'));
+  for (const mm of ['flat','seg']){
+    const cc=counts(R[mm]);
+    $(`#c-${mm}-att`).innerHTML = chip(cc.att, cc.succ===0);
+    $(`#c-${mm}-biz`).innerHTML = chip(cc.biz, cc.pass===cc.bizN);
+    $(`#c-${mm}-int`).innerHTML = chip(cc.int, cc.int==='INTACT');
+  }
+  // steps
+  $('#steps').innerHTML = STAGES.map(s=>{
+    const st=r.stages[s.id]; const label={pending:'not run',running:'running…',succeeded:'SUCCEEDED',blocked:'BLOCKED'}[st.status];
+    const cls={pending:'',running:'amber',succeeded:'red',blocked:'green'}[st.status];
+    return `<div class="step ${st.status}"><div class="n">${s.id}</div>
+      <div><div class="t">${esc(s.title)}<span class="tech">${s.tech}</span></div><div class="m">${esc(s.desc)}</div>
+      ${st.detail.length?`<pre>${esc(st.detail.join('\n'))}</pre>`:''}</div>
+      <span class="chip ${cls}">${st.status==='running'?'<span class="spinner"></span>':''}${label}</span></div>`;
+  }).join('');
+  $('#attstatus').innerHTML = c.att==='–' ? '' : (c.succ>0 ? `<span class="chip red">${c.succ} of 5 stages succeeded</span>` : (r.attackDone?'<span class="chip green">all 5 stages blocked</span>':''));
+  // flows
+  $('#flows').innerHTML = FLOWS.map(f=>{ const st=r.flows[f.k];
+    return `<div class="flow"><span class="dot ${st==='PASS'?'pass':st==='FAIL'?'fail':''}"></span><code>${f.k.split(' ')[0]}</code> ${esc(f.label)}
+      <span style="margin-left:auto">${st?`<span class="chip ${st==='PASS'?'green':'red'}">${st}</span>`:'<span class="chip">not run</span>'}</span></div>`; }).join('');
+  renderDB(); renderFW();
+}
+
+function renderDB(){
+  const d=db[mode], b=$('#dbbanner'), t=$('#dbtable');
+  if (!d || !d.ok){ b.className='banner none'; b.textContent = labs[mode].length? 'Loading…' : 'Lab is not running in this mode. Press ▶ Start lab.'; t.innerHTML=''; return; }
+  if (d.tampered){ b.className='banner bad'; b.innerHTML='⚠ DATA TAMPERED: a record no longer matches the trusted baseline'; }
+  else { b.className='banner good'; b.innerHTML='✔ DATA INTACT: all records match the trusted baseline'; }
+  t.innerHTML = '<tr><th>ID</th><th>Name</th><th>Dept</th><th>Role</th><th>Salary</th></tr>' + d.rows.map(r=>
+    `<tr class="${r.changed.length||r.new?'bad':''}">`+ r.cols.map((v,i)=> r.changed.includes(i)
+      ? `<td><span class="old">${esc(r.baseline[i])}</span><span class="new">${esc(v)}</span></td>` : `<td>${esc(v)}</td>`).join('')+'</tr>').join('');
+}
+
+function renderFW(){
+  const box=$('#fw');
+  if (mode==='flat'){ box.innerHTML='<div class="banner bad" style="font-weight:600">No firewall: in the flat network every packet from the workstation reaches its target.</div><div class="empty">Switch to AFTER to see the router\'s default-deny ruleset at work.</div>'; return; }
+  if (!fw || !fw.ok){ box.innerHTML='<div class="empty">Router not running. Start the segmented lab.</div>'; return; }
+  const c=fw.counters||{};
+  const tile=(k,v,cls)=>`<div class="tile ${cls||''}"><div class="k">${k}</div><div class="v">${v??0}</div></div>`;
+  box.innerHTML = `<div class="tiles" style="grid-template-columns:repeat(4,1fr)">
+      ${tile('Dropped + logged',c.dropped,'good')}${tile('user→web :443',c.user_to_web_443)}${tile('web→app :8080',c.web_to_app_8080)}${tile('admin SSH',c.admin_ssh)}</div>
+    <h2 style="margin:12px 0 6px">Last dropped packets</h2>
+    <div class="fwlist">${fw.drops.length? fw.drops.slice().reverse().map(d=>`<div class="fwrow"><span style="color:var(--muted)">${esc(d.time.split(' ').pop())}</span>
+      <span class="a">${esc(d.src)} → ${esc(d.dst)}${d.dport?':'+esc(d.dport):''} <span style="color:var(--muted)">${esc(d.proto)}</span></span><span class="p">${esc(d.rule)} ✕</span></div>`).join('')
+      : '<div class="empty">No drops logged yet. Run the attack.</div>'}</div>`;
+}
+
+// ---------------- terminal + stream parsing ----------------
+const term=$('#term');
+function termLine(text, cls){
+  const atBottom = term.scrollTop+term.clientHeight >= term.scrollHeight-30;
+  const d=document.createElement('div'); if(cls) d.className=cls; d.textContent=text; term.appendChild(d);
+  while (term.childNodes.length>3000) term.removeChild(term.firstChild);
+  if (atBottom) term.scrollTop=term.scrollHeight;
+}
+function classify(t){
+  if (/SUCCEEDED|DATA TAMPERED|^FAIL|^\s+\+ /.test(t)) return 'red';
+  if (/BLOCKED|DATA INTACT|^PASS|RESULT: 0\/5/.test(t)) return 'green';
+  if (/^--- A\d|^=== /.test(t)) return 'amber';
+  if (/^\s*(=>|#\d|\[\+\]| ✔ )/.test(t)) return 'dim';
+  return '';
+}
+function onEvent(e){
+  if (e.kind==='start'){
+    const j=JSON.parse(e.text); cur={mode:j.mode,cmd:j.cmd,stage:null,intBlock:false};
+    const r=R[j.mode];
+    if (j.cmd==='attack'){ Object.assign(r, {stages:blank().stages, attackDone:false, integrity:null, diff:[]}); }
+    if (j.cmd==='business'){ r.flows={}; }
+    if (['up','down','reset'].includes(j.cmd)){ R[j.mode]=blank(); }
+    const hd=document.createElement('div'); hd.innerHTML=`<span class="hd">$ ./run.sh ${esc(j.mode)} ${esc(j.cmd)}</span>`; term.appendChild(hd); term.scrollTop=term.scrollHeight;
+    if (j.mode!==mode) setMode(j.mode, true); else draw();
+    return;
+  }
+  if (e.kind==='end'){ const j=JSON.parse(e.text); if(j.cmd==='attack') R[j.mode].attackDone=true;
+    termLine(`[exit ${j.rc}]`, j.rc===0?'dim':'red'); refreshAll(); draw(); return; }
+  if (e.kind==='idle'){ refreshAll(); return; }
+  const t=e.text; termLine(t, classify(t));
+  if (!cur.mode) return; const r=R[cur.mode]; let m;
+  if ((m=t.match(/^--- (A\d)/))){ cur.stage=m[1]; r.stages[m[1]].status='running'; r.stages[m[1]].detail=[]; cur.intBlock=false; }
+  else if ((m=t.match(/^\[[!x]\] (A\d) .*-> (SUCCEEDED|BLOCKED)/))){ r.stages[m[1]].status=m[2].toLowerCase(); cur.stage=null; }
+  else if (cur.stage && /^    /.test(t)){ const d=r.stages[cur.stage].detail; d.push(t.trim()); if(d.length>6) d.shift(); }
+  else if ((m=t.match(/^(PASS|FAIL)\s+(B\d)\s+(\S+)\s+->\s+(\S+?)(:|\s)/))){
+    let k=m[2]; if(k==='B6') k='B6 '+m[4]; r.flows[k]=m[1]; }
+  else if (/DATA INTACT/.test(t)){ r.integrity='INTACT'; }
+  else if (/DATA TAMPERED/.test(t)){ r.integrity='TAMPERED'; cur.intBlock=true; }
+  else if (/^=== RESULT: .*attack/.test(t)){ r.attackDone=true; }
+  else return;
+  draw();
+}
+let lastI=0;
+function connect(){
+  const es=new EventSource('/api/stream?from='+lastI);
+  es.onmessage = ev => { const e=JSON.parse(ev.data); lastI=e.i+1; onEvent(e); };
+  es.onerror = () => { es.close(); setTimeout(connect, 2000); };
+}
+
+// ---------------- data refresh ----------------
+async function loadState(){
+  try{ const s=await (await fetch('/api/state')).json(); labs=s.lab; job=s.job; }catch(e){}
+  const up=labs[mode]&&labs[mode].length, p=$('#labpill');
+  if (job.running){ p.className='pill busy'; p.innerHTML=`<span class="spinner"></span>${esc(job.mode)} ${esc(job.cmd)}`; }
+  else { p.className='pill '+(up?'up':''); p.textContent = up? `${mode} lab: ${labs[mode].length} hosts up` : `${mode} lab: stopped`; }
+  $('#jobstatus').innerHTML = job.running? `<span class="chip amber"><span class="spinner"></span>running ./run.sh ${esc(job.mode)} ${esc(job.cmd)}</span>` : '<span class="chip">idle</span>';
+  document.querySelectorAll('.actions .btn').forEach(b=>{
+    const c=b.dataset.cmd; b.disabled = job.running || (c!=='up' && !up);
+  });
+}
+async function loadDB(){ try{ db[mode]=await (await fetch('/api/db?mode='+mode)).json(); }catch(e){ db[mode]=null; } renderDB(); }
+async function loadFW(){ if(mode!=='seg') return renderFW(); try{ fw=await (await fetch('/api/fw')).json(); }catch(e){ fw=null; } renderFW(); }
+async function refreshAll(){ await loadState(); await Promise.all([loadDB(), loadFW()]); }
+
+function setMode(m, silent){
+  mode=m; $('#m-flat').classList.toggle('on',m==='flat'); $('#m-seg').classList.toggle('on',m==='seg');
+  draw(); refreshAll();
+}
+document.querySelectorAll('.actions .btn').forEach(b=> b.onclick = async ()=>{
+  const cmd=b.dataset.cmd;
+  if (cmd==='down' && !confirm(`Stop the ${mode} lab?`)) return;
+  const res=await fetch(`/api/run?mode=${mode}&cmd=${cmd}`,{method:'POST'});
+  if(!res.ok){ const j=await res.json().catch(()=>({})); alert(j.error||'request failed'); }
+  loadState();
+});
+
+buildStatic(); draw(); connect(); refreshAll(); setInterval(loadState, 3000);
+</script>
+</body>
+</html>

@@ -1,0 +1,34 @@
+# BEFORE: everything on one flat /24
+x-hosts: &hosts
+  - "ws:10.10.0.10"
+  - "web:10.10.0.20"
+  - "app:10.10.0.30"
+  - "db:10.10.0.40"
+  - "files:10.10.0.50"
+  - "admin:10.10.0.60"
+x-host: &host
+  build: ./image
+  image: flatland-lab
+  cap_add: [NET_ADMIN, NET_RAW]
+  volumes: ["./lab:/lab:ro"]
+  extra_hosts: *hosts
+
+services:
+  ws:    { <<: *host, hostname: ws,    environment: { ROLE: ws },    networks: { flat: { ipv4_address: 10.10.0.10 } } }
+  web:   { <<: *host, ports: ["127.0.0.1:8443:443"], hostname: web,   environment: { ROLE: web },   networks: { flat: { ipv4_address: 10.10.0.20 } } }
+  app:   { <<: *host, hostname: app,   environment: { ROLE: app },   networks: { flat: { ipv4_address: 10.10.0.30 } } }
+  files: { <<: *host, hostname: files, environment: { ROLE: files }, networks: { flat: { ipv4_address: 10.10.0.50 } } }
+  admin: { <<: *host, hostname: admin, environment: { ROLE: admin }, networks: { flat: { ipv4_address: 10.10.0.60 } } }
+  db:
+    build: ./db-image
+    image: flatland-db
+    hostname: db
+    cap_add: [NET_ADMIN]
+    volumes: ["./lab:/lab:ro", "./lab/conf/init.sql:/docker-entrypoint-initdb.d/init.sql:ro"]
+    extra_hosts: *hosts
+    environment: { POSTGRES_USER: appuser, POSTGRES_PASSWORD: AppDb2024, POSTGRES_DB: corp }
+    networks: { flat: { ipv4_address: 10.10.0.40 } }
+
+networks:
+  flat:
+    ipam: { config: [ { subnet: 10.10.0.0/24 } ] }
